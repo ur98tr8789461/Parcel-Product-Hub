@@ -4,10 +4,14 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
+// ----------------------
+// ENV SECURITY
+// ----------------------
 const API_KEY = process.env.API_KEY;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // ----------------------
-// Helpers
+// DATA
 // ----------------------
 const getProducts = () => {
   return JSON.parse(fs.readFileSync("./products.json"));
@@ -18,22 +22,43 @@ const saveProducts = (data) => {
 };
 
 // ----------------------
-// Middleware (API key protection)
+// LOGIN (simple password check)
+// ----------------------
+app.post("/login", (req, res) => {
+  const { password } = req.body;
+
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: "Wrong password" });
+  }
+
+  // super simple “session token”
+  const token = "admin-" + Date.now();
+
+  res.json({ token });
+});
+
+// ----------------------
+// API AUTH middleware
 // ----------------------
 app.use((req, res, next) => {
-  if (req.method !== "GET") {
-    if (req.headers["x-api-key"] !== API_KEY) {
-      return res.status(401).json({ error: "Invalid API key" });
-    }
+  // allow login route
+  if (req.path === "/login") return next();
+
+  // check API key for everything else
+  const key = req.headers["x-api-key"];
+
+  if (key !== API_KEY) {
+    return res.status(401).json({ error: "No API key" });
   }
+
   next();
 });
 
 // ----------------------
-// Routes
+// ROUTES
 // ----------------------
 app.get("/", (req, res) => {
-  res.send("Product API running 🚀");
+  res.send("Secure Product API 🔐");
 });
 
 // GET all products
@@ -41,10 +66,14 @@ app.get("/products", (req, res) => {
   res.json(getProducts());
 });
 
-// GET one product
+// GET product
 app.get("/products/:id", (req, res) => {
   const product = getProducts().find(p => p.id === req.params.id);
-  if (!product) return res.status(404).json({ error: "Not found" });
+
+  if (!product) {
+    return res.status(404).json({ error: "Not found" });
+  }
+
   res.json(product);
 });
 
@@ -83,9 +112,9 @@ app.post("/products", (req, res) => {
 });
 
 // ----------------------
-// Start server
+// START SERVER
 // ----------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Running on port " + PORT);
 });
