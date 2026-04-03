@@ -41,13 +41,11 @@ app.post("/login", (req, res) => {
 // API AUTH middleware
 // ----------------------
 app.use((req, res, next) => {
-  // allow login route
   if (req.path === "/login") return next();
 
-  // check API key for everything else
-  const key = req.headers["x-api-key"];
+  const key = req.query.key;
 
-  if (key !== API_KEY) {
+  if (key !== process.env.API_KEY) {
     return res.status(401).json({ error: "No API key" });
   }
 
