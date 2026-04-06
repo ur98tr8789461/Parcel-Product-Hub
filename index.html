@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parcel Product Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-blue-400">Parcel Product Manager</h1>
+        
+        <div class="bg-gray-800 p-6 rounded-lg mb-8 shadow-lg">
+            <label class="block mb-2 font-semibold">Parcel API Key:</label>
+            <input type="password" id="apiKey" class="w-full p-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 outline-none" placeholder="Enter your prod_... key">
+            <button onclick="fetchProducts()" class="mt-4 bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-bold transition">Load Products</button>
+        </div>
+
+        <div id="productContainer" class="grid gap-4">
+            <p class="text-gray-400">Enter your API key and click "Load Products" to begin.</p>
+        </div>
+    </div>
+
+    <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-8 rounded-lg max-w-md w-full">
+            <h2 class="text-xl font-bold mb-4">Update Product</h2>
+            <form id="updateForm" class="space-y-4">
+                <input type="hidden" id="editProductId">
+                <div>
+                    <label class="block text-sm">Product Name</label>
+                    <input type="text" id="editName" class="w-full p-2 bg-gray-700 rounded border border-gray-600">
+                </div>
+                <div>
+                    <label class="block text-sm">Description</label>
+                    <textarea id="editDesc" class="w-full p-2 bg-gray-700 rounded border border-gray-600"></textarea>
+                </div>
+                <div class="flex justify-between mt-6">
+                    <button type="button" onclick="closeModal()" class="text-gray-400 hover:text-white">Cancel</button>
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-bold">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "https://v2.parcelroblox.com";
+
+        async function fetchProducts() {
+            const key = document.getElementById('apiKey').value;
+            const container = document.getElementById('productContainer');
+            container.innerHTML = "Loading...";
+
+            try {
+                // Fetching Hub/Product info (Adjusted for Parcel V2 structure)
+                const response = await fetch(`${API_BASE}/hub/info`, {
+                    headers: { 'Authorization': key }
+                });
+                const result = await response.json();
+
+                if (result.status !== "200") throw new Error(result.message);
+
+                const products = result.data.products;
+                container.innerHTML = products.map(p => `
+                    <div class="bg-gray-800 p-4 rounded border-l-4 border-blue-500 flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-lg">${p.name}</h3>
+                            <p class="text-sm text-gray-400">${p.description || 'No description'}</p>
+                            <span class="text-xs bg-gray-700 px-2 py-1 rounded mt-2 inline-block">ID: ${p.id}</span>
+                        </div>
+                        <button onclick="openEditModal('${p.id}', '${p.name}', '${p.description}')" class="bg-gray-700 hover:bg-gray-600 p-2 rounded">Edit</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = `<p class="text-red-400">Error: ${err.message}</p>`;
+            }
+        }
+
+        function openEditModal(id, name, desc) {
+            document.getElementById('editProductId').value = id;
+            document.getElementById('editName').value = name;
+            document.getElementById('editDesc').value = desc;
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        document.getElementById('updateForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const key = document.getElementById('apiKey').value;
+            const id = document.getElementById('editProductId').value;
+            
+            const payload = {
+                name: document.getElementById('editName').value,
+                description: document.getElementById('editDesc').value
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/products/update`, {
+                    method: 'PATCH',
+                    headers: { 
+                        'Authorization': key,
+                        'Content-Type': 'application/json' 
+                    },
+                    body: JSON.stringify({ product_id: id, ...payload })
+                });
+                
+                const data = await res.json();
+                if (data.status === "200") {
+                    alert("Updated successfully!");
+                    closeModal();
+                    fetchProducts();
+                } else {
+                    alert("Update failed: " + data.message);
+                }
+            } catch (err) {
+                alert("Error: " + err.message);
+            }
+        };
+    </script>
+</body>
+</html>
