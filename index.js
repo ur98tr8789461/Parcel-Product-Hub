@@ -7,11 +7,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const sessions = {}; // temporary (resets on restart)
+/* ───────── TEMP SESSION STORE ───────── */
+const sessions = {}; // token -> apiKey
 
-/* AUTH */
+/* ───────── ROOT (for testing) ───────── */
+app.get("/", (req, res) => {
+  res.send("Parcel Backend Running 🚀");
+});
+
+/* ───────── AUTH ───────── */
 app.post("/auth", async (req, res) => {
   const { apiKey } = req.body;
+
+  if (!apiKey) {
+    return res.status(400).json({ error: "API key required" });
+  }
 
   try {
     const test = await fetch("https://v2.parcelroblox.com/products/all", {
@@ -19,53 +29,71 @@ app.post("/auth", async (req, res) => {
     });
 
     if (!test.ok) {
-      return res.status(401).json({ error: "Invalid key" });
+      return res.status(401).json({ error: "Invalid API key" });
     }
 
     const token = crypto.randomBytes(16).toString("hex");
     sessions[token] = apiKey;
 
     res.json({ token });
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* GET PRODUCTS */
+/* ───────── GET PRODUCTS ───────── */
 app.get("/products", async (req, res) => {
   const token = req.headers.authorization;
   const apiKey = sessions[token];
 
-  if (!apiKey) return res.status(401).send("Unauthorized");
+  if (!apiKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
-  const response = await fetch("https://v2.parcelroblox.com/products/all", {
-    headers: { Authorization: apiKey },
-  });
+  try {
+    const response = await fetch("https://v2.parcelroblox.com/products/all", {
+      headers: { Authorization: apiKey },
+    });
 
-  res.json(await response.json());
+    const data = await response.json();
+    res.json(data);
+  } catch {
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
 });
 
-/* UPDATE PRODUCT */
+/* ───────── UPDATE PRODUCT ───────── */
 app.patch("/products/:id", async (req, res) => {
   const token = req.headers.authorization;
   const apiKey = sessions[token];
 
-  if (!apiKey) return res.status(401).send("Unauthorized");
+  if (!apiKey) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
-  const response = await fetch(
-    `https://v2.parcelroblox.com/products/update/${req.params.id}`,
-    {
-      method: "PATCH",
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(req.body),
-    }
-  );
+  try {
+    const response = await fetch(
+      `https://v2.parcelroblox.com/products/update/${req.params.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(req.body),
+      }
+    );
 
-  res.json(await response.json());
+    const data = await response.json();
+    res.json(data);
+  } catch {
+    res.status(500).json({ error: "Failed to update product" });
+  }
 });
 
+/* ───────── SERVER START ───────── */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
