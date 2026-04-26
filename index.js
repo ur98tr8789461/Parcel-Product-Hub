@@ -1,118 +1,71 @@
-const express = require("express");
-const fs = require("fs");
+import express from "express";
+import fetch from "node-fetch";
+import cors from "cors";
+import crypto from "crypto";
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-// ----------------------
-// ENV SECURITY
-// ----------------------
-const API_KEY = process.env.API_KEY;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const sessions = {}; // temporary (resets on restart)
 
-// ----------------------
-// DATA
-// ----------------------
-const getProducts = () => {
-  return JSON.parse(fs.readFileSync("./products.json"));
-};
+/* AUTH */
+app.post("/auth", async (req, res) => {
+  const { apiKey } = req.body;
 
-const saveProducts = (data) => {
-  fs.writeFileSync("./products.json", JSON.stringify(data, null, 2));
-};
+  try {
+    const test = await fetch("https://v2.parcelroblox.com/products/all", {
+      headers: { Authorization: apiKey },
+    });
 
-// ----------------------
-// LOGIN (simple password check)
-// ----------------------
-app.post("/login", (req, res) => {
-  const { password } = req.body;
+    if (!test.ok) {
+      return res.status(401).json({ error: "Invalid key" });
+    }
 
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Wrong password" });
+    const token = crypto.randomBytes(16).toString("hex");
+    sessions[token] = apiKey;
+
+    res.json({ token });
+  } catch {
+    res.status(500).json({ error: "Server error" });
   }
-
-  // super simple “session token”
-  const token = "admin-" + Date.now();
-
-  res.json({ token });
 });
 
-// ----------------------
-// API AUTH middleware
-// ----------------------
-app.use((req, res, next) => {
-  if (req.path === "/login") return next();
+/* GET PRODUCTS */
+app.get("/products", async (req, res) => {
+  const token = req.headers.authorization;
+  const apiKey = sessions[token];
 
-  const key = req.query.key;
+  if (!apiKey) return res.status(401).send("Unauthorized");
 
-  if (key !== process.env.API_KEY) {
-    return res.status(401).json({ error: "No API key" });
-  }
+  const response = await fetch("https://v2.parcelroblox.com/products/all", {
+    headers: { Authorization: apiKey },
+  });
 
-  next();
+  res.json(await response.json());
 });
 
-// ----------------------
-// ROUTES
-// ----------------------
-app.get("/", (req, res) => {
-  res.send("Secure Product API 🔐");
+/* UPDATE PRODUCT */
+app.patch("/products/:id", async (req, res) => {
+  const token = req.headers.authorization;
+  const apiKey = sessions[token];
+
+  if (!apiKey) return res.status(401).send("Unauthorized");
+
+  const response = await fetch(
+    `https://v2.parcelroblox.com/products/update/${req.params.id}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(req.body),
+    }
+  );
+
+  res.json(await response.json());
 });
 
-// GET all products
-app.get("/products", (req, res) => {
-  res.json(getProducts());
-});
-
-// GET product
-app.get("/products/:id", (req, res) => {
-  const product = getProducts().find(p => p.id === req.params.id);
-
-  if (!product) {
-    return res.status(404).json({ error: "Not found" });
-  }
-
-  res.json(product);
-});
-
-// UPDATE product
-app.put("/products/:id", (req, res) => {
-  const products = getProducts();
-  const index = products.findIndex(p => p.id === req.params.id);
-
-  if (index === -1) {
-    return res.status(404).json({ error: "Not found" });
-  }
-
-  products[index] = {
-    ...products[index],
-    ...req.body
-  };
-
-  saveProducts(products);
-
-  res.json(products[index]);
-});
-
-// ADD product
-app.post("/products", (req, res) => {
-  const products = getProducts();
-
-  const newProduct = {
-    id: Date.now().toString(),
-    ...req.body
-  };
-
-  products.push(newProduct);
-  saveProducts(products);
-
-  res.json(newProduct);
-});
-
-// ----------------------
-// START SERVER
-// ----------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Running on port " + PORT);
-});
+app.listen(PORT, () => console.log("Server running on", PORT));
